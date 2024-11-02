@@ -1,11 +1,10 @@
-import WebGL from 'https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/capabilities/WebGL.js'; 
-if (!WebGL.isWebGL2Available()) 
-{ 
+import WebGL from 'https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/capabilities/WebGL.js';
+if (!WebGL.isWebGL2Available()) {
     const warning = WebGL.getWebGL2ErrorMessage();
-    document.querySelector("body").appendChild( warning ); 
-} 
+    document.querySelector("body").appendChild(warning);
+}
 
-import * as THREE  from 'https://cdn.jsdelivr.net/npm/three@0.154.0/build/three.module.js'
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.154.0/build/three.module.js'
 
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'
@@ -16,11 +15,11 @@ window.addEventListener('load', _ => {
 
 export default class Initializer {
     constructor() {
-        Ammo().then( ( AmmoLib ) => {
+        Ammo().then((AmmoLib) => {
             Ammo = AmmoLib;
             this.init();
         });
-    }    
+    }
 
     init() {
         this.clock = new THREE.Clock();
@@ -29,7 +28,7 @@ export default class Initializer {
         this.margin = 0.05;
         this.rigidBodies = [];
         this.meshes = [];
-        this.meshMap = new WeakMap(); 
+        this.meshMap = new WeakMap();
         this.initGraphics();
         this.initPhysics();
         this.createWorld();
@@ -43,21 +42,21 @@ export default class Initializer {
 
         const frustumSize = 40;
         const aspect = window.innerWidth / window.innerHeight;
-        this.camera = new THREE.OrthographicCamera( 
-            frustumSize * aspect / - 2, 
-            frustumSize * aspect / 2, 
-            frustumSize / 2, 
-            frustumSize / - 2, 
-            1, 
-            1000 );
-        this.camera.position.set(0,20,40);
-        this.camera.rotation.set(-Math.PI/8,0,0);
+        this.camera = new THREE.OrthographicCamera(
+            frustumSize * aspect / - 2,
+            frustumSize * aspect / 2,
+            frustumSize / 2,
+            frustumSize / - 2,
+            1,
+            1000);
+        this.camera.position.set(0, 20, 40);
+        this.camera.rotation.set(-Math.PI / 8, 0, 0);
 
-        this.renderer = new THREE.WebGLRenderer({antialias:true});
-        this.renderer.setSize( window.innerWidth, window.innerHeight );
+        this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(window.devicePixelRatio);
 
-        document.body.appendChild( this.renderer.domElement );
+        document.body.appendChild(this.renderer.domElement);
     }
 
     createGLTF() {
@@ -66,21 +65,115 @@ export default class Initializer {
         this.dracoLoader.setDecoderPath('/static/draco/');
         this.loader.setDRACOLoader(this.dracoLoader);
         this.loader.load('./hole_tile.glb', (gltf) => {
-            const geometry = gltf.scene.children[0].geometry;
-            const material = gltf.scene.children[0].material;
-            this.createInstances(geometry,material,1);
-        }); 
+            this.waitForTileLoad(gltf, 1)
+        });
+        this.loader.load('./blank_tile.glb', (gltf) => {
+            this.waitForTileLoad(gltf, 0);
+        });
     }
 
-    createInstances(geometry, material, count){
+    waitForTileLoad(gltf, tileNum) {
+        let tileMap = [
+            [0, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0]
+        ];
+        const geometry = gltf.scene.children[0].geometry;
+        const material = gltf.scene.children[0].material;
+        for (let i = 0; i < tileMap.length; i++) {
+            for (let j = 0; j < tileMap[i].length; j++) {
+                let curTile = tileMap[i][j];
+                if (curTile == tileNum) {
+                    this.createInstancedMeshRigidBodies(geometry, material, 1, 0, new THREE.Vector3(i * 2, 0, j * 2));
+                }
+            }
+        }
+
+    }
+
+    createBall() {
+        let ballRadius = 1.0;
+
+        this.ball = new THREE.Mesh(
+            new THREE.SphereGeometry(ballRadius, 14, 10),
+            new THREE.MeshPhongMaterial({ color: "#5599aa" })
+        );
+        this.ball.castShadow = true;
+        this.ball.receiveShadow = true;
+        this.ball.mass = 35
+
+        const ballShape = new Ammo.btSphereShape(ballRadius);
+        ballShape.setMargin(0.05);
+        let pos = new Ammo.btVector3(0, 5, 0);
+        let quat = new Ammo.btVector4(0, 0, 0, 1);
+        const ballBody = this.createRigidBody(
+            this.ball,
+            ballShape,
+            35,
+            pos,
+            quat,
+            new THREE.Vector3(0, 0, 0));
+    }
+
+    createRigidBody(object, physicsShape, mass, pos, quat, vel, angVel) {
+        if (pos) {
+            object.position.copy(pos);
+        } else {
+            pos = object.position;
+        }
+
+        if (quat) {
+            object.quaternion.copy(quat);
+        } else {
+            quat = object.quaternion;
+        }
+
+        const transform = new Ammo.btTransform();
+        transform.setIdentity();
+        transform.setOrigin(new Ammo.btVector3(pos.x, pos.y, pos.z));
+        transform.setRotation(new Ammo.btQuaternion(quat.x, quat.y, quat.z, quat.w));
+        const motionState = new Ammo.btDefaultMotionState(transform);
+
+        const localInertia = new Ammo.btVector3(0, 0, 0);
+        physicsShape.calculateLocalInertia(mass, localInertia);
+
+        const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, physicsShape, localInertia);
+        const body = new Ammo.btRigidBody(rbInfo);
+
+        body.setFriction(0.5);
+
+        if (vel) {
+            body.setLinearVelocity(new Ammo.btVector3(vel.x, vel.y, vel.z));
+        }
+
+        if (angVel) {
+            body.setAngularVelocity(new Ammo.btVector3(angVel.x, angVel.y, angVel.z));
+        }
+        object.userData.physicsBody = body;
+        object.userData.collided = false;
+
+        this.scene.add(object);
+        if (mass > 0) {
+            this.rigidBodies.push(object);
+            // Disable deactivation
+            body.setActivationState(4);
+        }
+        this.physicsWorld.addRigidBody(body);
+        return body;
+    }
+
+    createInstancedMeshRigidBodies(geometry, material, count, mass, position) {
         const matrix = new THREE.Matrix4();
         const mesh = new THREE.InstancedMesh(geometry, material, 1);
 
-        for(let i = 0; i < count; i++){
-            this.randomizeMatrix(matrix);
+        for (let i = 0; i < count; i++) {
+            this.getPositionMatrix(matrix);
+            matrix.setPosition(position);
+
             mesh.setMatrixAt(i, matrix);
             mesh.castShadow = true;
-
         }
         this.scene.add(mesh);
         let triangle, triangle_mesh = new Ammo.btTriangleMesh();
@@ -120,77 +213,84 @@ export default class Initializer {
         Ammo.destroy(vectB);
         Ammo.destroy(vectC);
 
-        let shape = new Ammo.btConvexTriangleMeshShape( triangle_mesh, true);
-        
+        let shape = new Ammo.btConvexTriangleMeshShape(triangle_mesh, true);
+
         geometry.verticesNeedUpdate = true;
 
-        this.handleInstancedMesh(mesh, shape, 1);
+        this.handleInstancedMesh(mesh, shape, mass);
     }
 
-    randomizeMatrix( matrix ) {
+    getPositionMatrix(matrix) {
         const position = new THREE.Vector3();
         const rotation = new THREE.Euler();
         const quaternion = new THREE.Quaternion();
         const scale = new THREE.Vector3();
-        position.x = Math.random() * 5;
-        position.y = Math.random() * 5;
-        position.z = Math.random() * 5;
+        position.x = 0;
+        position.y = 0;
+        position.z = 0;
 
         rotation.x = 0;
-        rotation.y = 0 ;
+        rotation.y = 0;
         rotation.z = 0;
 
-        quaternion.setFromEuler( rotation );
+        quaternion.setFromEuler(rotation);
 
         scale.x = scale.y = scale.z = 1;
 
-        matrix.compose( position, quaternion, scale );
+        matrix.compose(position, quaternion, scale);
     };
 
-    handleInstancedMesh(mesh, shape, mass){
+    handleInstancedMesh(mesh, shape, mass) {
         const array = mesh.instanceMatrix.array;
         const bodies = [];
 
-        for(let i = 0; i < mesh.count; i++){
+        for (let i = 0; i < mesh.count; i++) {
             const index = i * 16;
-            
+
             const transform = new Ammo.btTransform();
             transform.setFromOpenGLMatrix(array.slice(index, index + 16));
 
             const motionState = new Ammo.btDefaultMotionState(transform);
 
-            const localInertia = new Ammo.btVector3( 0, 0, 0 );
+            const localInertia = new Ammo.btVector3(0, 0, 0);
             shape.calculateLocalInertia(mass, localInertia);
 
-            const rbInfo = new Ammo.btRigidBodyConstructionInfo( mass, motionState, shape, localInertia );
-            const body = new Ammo.btRigidBody( rbInfo );
-            this.physicsWorld.addRigidBody( body );
+            const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, shape, localInertia);
+            const body = new Ammo.btRigidBody(rbInfo);
+            this.physicsWorld.addRigidBody(body);
 
-            bodies.push( body );
+            bodies.push(body);
         }
         this.meshes.push(mesh);
         this.meshMap.set(mesh, bodies);
 
         let index = Math.floor(Math.random() * mesh.count);
-        let position = new THREE.Vector3();
-        position.set(0, Math.random() + 1, 0);
-        //this.setMeshPosition(mesh, position, index, Ammo)
+        if (mesh.isInstancedMesh) {
+            const bodies = this.meshMap.get(mesh)
+            const body = bodies[index]
+
+            body.setAngularVelocity(new Ammo.btVector3(0, 0, 0))
+            body.setLinearVelocity(new Ammo.btVector3(0, 0, 0))
+            this.tempTransform = new Ammo.btTransform();
+            this.tempTransform.setIdentity();
+            body.setWorldTransform(this.tempTransform)
+        }
     };
 
     initPhysics() {
         this.collisionConfiguration = new Ammo.btDefaultCollisionConfiguration();
-        this.dispatcher = new Ammo.btCollisionDispatcher( this.collisionConfiguration );
+        this.dispatcher = new Ammo.btCollisionDispatcher(this.collisionConfiguration);
         this.broadphase = new Ammo.btDbvtBroadphase();
         this.solver = new Ammo.btSequentialImpulseConstraintSolver();
-        this.physicsWorld = new Ammo.btDiscreteDynamicsWorld( 
-            this.dispatcher, 
-            this.broadphase, 
-            this.solver, 
-            this.collisionConfiguration );
-        this.physicsWorld.setGravity( new Ammo.btVector3( 0, - this.gravityConstant, 0 ) );
+        this.physicsWorld = new Ammo.btDiscreteDynamicsWorld(
+            this.dispatcher,
+            this.broadphase,
+            this.solver,
+            this.collisionConfiguration);
+        this.physicsWorld.setGravity(new Ammo.btVector3(0, - this.gravityConstant, 0));
 
         this.transformAux1 = new Ammo.btTransform();
-        this.tempBtVec3_1 = new Ammo.btVector3( 0, 0, 0 );
+        this.tempBtVec3_1 = new Ammo.btVector3(0, 0, 0);
     }
 
     /**
@@ -201,7 +301,7 @@ export default class Initializer {
         this.createGLTF();
         //createCube();
         //createGround();
-        //createBall();
+        this.createBall();
 
     }
 
@@ -209,8 +309,8 @@ export default class Initializer {
         const ambientLight = new THREE.AmbientLight("#888888");
         this.scene.add(ambientLight);
 
-        const light = new THREE.DirectionalLight( 0xffffff, 2 );
-        light.position.set( - 10, 18, 5 );
+        const light = new THREE.DirectionalLight(0xffffff, 2);
+        light.position.set(- 10, 18, 5);
         light.castShadow = true;
         const d = 14;
         light.shadow.camera.left = - d;
@@ -224,26 +324,26 @@ export default class Initializer {
         light.shadow.mapSize.x = 1024;
         light.shadow.mapSize.y = 1024;
 
-        this.scene.add( light );
+        this.scene.add(light);
     }
 
 
-    animate() { 
-        this.render(); 
+    animate() {
+        this.render();
         requestAnimationFrame(this.animate.bind(this));
-    } 
+    }
 
-    render() { 
+    render() {
         const deltaTime = this.clock.getDelta();
-        this.updatePhysics( deltaTime );
+        this.updatePhysics(deltaTime);
         //updateCube(deltaTime);
         //updateBall();
         //updateGround(deltaTime);
-        this.renderer.render( this.scene, this.camera );
+        this.renderer.render(this.scene, this.camera);
     }
 
     updatePhysics(deltaTime) {
         // Step world
-        this.physicsWorld.stepSimulation( deltaTime, 10 );
+        this.physicsWorld.stepSimulation(deltaTime, 10);
     }
 }
