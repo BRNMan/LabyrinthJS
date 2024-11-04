@@ -86,7 +86,15 @@ export default class Initializer {
             for (let j = 0; j < tileMap[i].length; j++) {
                 let curTile = tileMap[i][j];
                 if (curTile == tileNum) {
-                    this.createInstancedMeshRigidBodies(geometry, material, 1, 0, new THREE.Vector3(i * 2, 0, j * 2));
+                    const mesh = new THREE.Mesh(geometry, material);
+                    let position = new THREE.Vector3(i * 2, 0, j * 2);
+                    mesh.position.set(position.x,position.y,position.z);
+                    if(curTile == 1) {
+                        this.createConcaveRigidBodies(mesh, 1, 0);
+
+                    } else {
+                        this.createConcaveRigidBodies(mesh, 1, 0, true);
+                    }
                 }
             }
         }
@@ -105,66 +113,13 @@ export default class Initializer {
         ballShape.setMargin(0.05);
         let pos = new THREE.Vector3(0, 5, 0);
         let quat = new THREE.Vector4(0, 0, 0, 1);
-        const ballBody = this.createRigidBody(
-             this.ball,
-             ballShape,
-             35,
-             pos,
-             quat,
-            new Ammo.btVector3(0,0,0));
+        this.ball.position.set(pos.x,pos.y,pos.z);
+        const body = this.addShapeToPhysics(this.ball,ballShape,35);
+        
+        body.setLinearVelocity(new Ammo.btVector3(1,0,1));
     }
 
-    createRigidBody(object, physicsShape, mass, pos, quat, vel, angVel) {
-        if (pos) {
-            object.position.copy(pos);
-        } else {
-            pos = object.position;
-        }
-
-        if (quat) {
-            object.quaternion.copy(quat);
-        } else {
-            quat = object.quaternion;
-        }
- 
-        const transform = new Ammo.btTransform();
-        transform.setIdentity();
-        transform.setOrigin(new Ammo.btVector3(0, 5, 0));
-        transform.setRotation(new Ammo.btQuaternion(quat.x, quat.y, quat.z, quat.w));
-        const motionState = new Ammo.btDefaultMotionState(transform);
-
-        const localInertia = new Ammo.btVector3(0, 0, 0);
-        physicsShape.calculateLocalInertia(mass, localInertia);
-
-        const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, physicsShape, localInertia);
-        const body = new Ammo.btRigidBody(rbInfo);
-
-        body.setFriction(0.5);
-
-        if (vel) {
-            body.setLinearVelocity(new Ammo.btVector3(vel.x(), vel.y(), vel.z()));
-        }
-
-        if (angVel) {
-            body.setAngularVelocity(new Ammo.btVector3(angVel.x, angVel.y, angVel.z));
-        }
-
-        object.userData.physicsBody = body;
-
-        this.scene.add(object);
-        if (mass > 0) {
-            this.rigidBodies.push(object);
-            // Disable deactivation
-            body.setActivationState(4);
-        }
-        this.physicsWorld.addRigidBody(body);
-        return body;
-    }
-
-    createInstancedMeshRigidBodies(geometry, material, count, mass, position) {
-        const matrix = new THREE.Matrix4();
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.set(position.x,position.y,position.z);
+    createConcaveRigidBodies(mesh, count, mass, isConvex) {
         this.scene.add(mesh);
         let triangle,triangle_mesh = new Ammo.btTriangleMesh();
         
@@ -174,7 +129,7 @@ export default class Initializer {
         let vectC = new Ammo.btVector3(0, 0, 0);
 
         //retrieve vertices positions from object
-        let verticesPos = geometry.getAttribute('position').array
+        let verticesPos = mesh.geometry.getAttribute('position').array
         let triangles = []
         for (let i = 0; i < verticesPos.length; i += 3) {
             triangles.push({
@@ -203,13 +158,15 @@ export default class Initializer {
         Ammo.destroy(vectA);
         Ammo.destroy(vectB);
         Ammo.destroy(vectC);
-         
-        let shape = new Ammo.btTriangleMeshShape(triangle_mesh, true); 
-        shape.updateBound();
+        
+        let shape = new Ammo.btConvexTriangleMeshShape(triangle_mesh, true); 
+        if(!isConvex) {
+            shape = new Ammo.btGImpactMeshShape(triangle_mesh, true); 
+        } 
         shape.setMargin(0.2);
         shape.setLocalScaling(new Ammo.btVector3(1,1,1));
         
-        this.addShapeToPhysics(mesh, shape, mass, position);
+        this.addShapeToPhysics(mesh, shape, mass);
     }
 
     addShapeToPhysics(mesh, shape, mass) {
@@ -234,6 +191,7 @@ export default class Initializer {
         mesh.userData.physicsBody = body;
 
         this.rigidBodies.push(mesh);
+        return body;
     };
 
     initPhysics() {
