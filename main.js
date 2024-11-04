@@ -100,21 +100,19 @@ export default class Initializer {
             new THREE.SphereGeometry(ballRadius, 14, 10),
             new THREE.MeshPhongMaterial({ color: "#5599aa" })
         );
-        this.ball.castShadow = true;
-        this.ball.receiveShadow = true;
-        this.ball.mass = 35
+        this.scene.add(this.ball);
 
         const ballShape = new Ammo.btSphereShape(ballRadius);
         ballShape.setMargin(0.05);
-        let pos = new Ammo.btVector3(0, 5, 0);
-        let quat = new Ammo.btVector4(0, 0, 0, 1);
+        let pos = new THREE.Vector3(0, 5, 0);
+        let quat = new THREE.Vector4(0, 0, 0, 1);
         const ballBody = this.createRigidBody(
-            this.ball,
-            ballShape,
-            35,
-            pos,
-            quat,
-            new THREE.Vector3(0, 0, 0));
+             this.ball,
+             ballShape,
+             35,
+             pos,
+             quat,
+            new Ammo.btVector3(1,0,1));
     }
 
     createRigidBody(object, physicsShape, mass, pos, quat, vel, angVel) {
@@ -129,10 +127,10 @@ export default class Initializer {
         } else {
             quat = object.quaternion;
         }
-
+ 
         const transform = new Ammo.btTransform();
         transform.setIdentity();
-        transform.setOrigin(new Ammo.btVector3(pos.x, pos.y, pos.z));
+        transform.setOrigin(new Ammo.btVector3(0, 5, 0));
         transform.setRotation(new Ammo.btQuaternion(quat.x, quat.y, quat.z, quat.w));
         const motionState = new Ammo.btDefaultMotionState(transform);
 
@@ -145,14 +143,14 @@ export default class Initializer {
         body.setFriction(0.5);
 
         if (vel) {
-            body.setLinearVelocity(new Ammo.btVector3(vel.x, vel.y, vel.z));
+            body.setLinearVelocity(new Ammo.btVector3(vel.x(), vel.y(), vel.z()));
         }
 
         if (angVel) {
             body.setAngularVelocity(new Ammo.btVector3(angVel.x, angVel.y, angVel.z));
         }
+
         object.userData.physicsBody = body;
-        object.userData.collided = false;
 
         this.scene.add(object);
         if (mass > 0) {
@@ -176,7 +174,7 @@ export default class Initializer {
             mesh.castShadow = true;
         }
         this.scene.add(mesh);
-        let triangle, triangle_mesh = new Ammo.btTriangleMesh();
+        let triangle,triangle_mesh = new Ammo.btTriangleMesh();
         //declare triangles position vectors
         let vectA = new Ammo.btVector3(0, 0, 0);
         let vectB = new Ammo.btVector3(0, 0, 0);
@@ -217,7 +215,7 @@ export default class Initializer {
 
         geometry.verticesNeedUpdate = true;
 
-        this.handleInstancedMesh(mesh, shape, mass);
+        this.handleInstancedMesh(mesh, shape, mass, position);
     }
 
     getPositionMatrix(matrix) {
@@ -240,7 +238,7 @@ export default class Initializer {
         matrix.compose(position, quaternion, scale);
     };
 
-    handleInstancedMesh(mesh, shape, mass) {
+    handleInstancedMesh(mesh, shape, mass, position) {
         const array = mesh.instanceMatrix.array;
         const bodies = [];
 
@@ -345,5 +343,22 @@ export default class Initializer {
     updatePhysics(deltaTime) {
         // Step world
         this.physicsWorld.stepSimulation(deltaTime, 10);
+        // Update objects
+        for ( let i = 0; i < this.rigidBodies.length; i ++ ) {
+
+            const objThree = this.rigidBodies[ i ];
+            const objPhys = objThree.userData.physicsBody;
+            const ms = objPhys.getMotionState();
+            if ( ms ) {
+                let transformAux1 = new Ammo.btTransform();
+                ms.getWorldTransform( transformAux1 );
+                const p = transformAux1.getOrigin();
+                const q = transformAux1.getRotation();
+                objThree.position.set( p.x(), p.y(), p.z() );
+                objThree.quaternion.set( q.x(), q.y(), q.z(), q.w() );
+
+            }
+
+        }
     }
 }
