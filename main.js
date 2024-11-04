@@ -101,7 +101,7 @@ export default class Initializer {
     }
 
     createBall() {
-        let ballRadius = 0.5;
+        let ballRadius = 0.6;
 
         this.ball = new THREE.Mesh(
             new THREE.SphereGeometry(ballRadius, 14, 10),
@@ -115,18 +115,11 @@ export default class Initializer {
         let quat = new THREE.Vector4(0, 0, 0, 1);
         this.ball.position.set(pos.x,pos.y,pos.z);
         const body = this.addShapeToPhysics(this.ball,ballShape,35);
-        
         body.setLinearVelocity(new Ammo.btVector3(1,0,1));
     }
 
     createConcaveRigidBodies(mesh, count, mass, isConvex) {
         this.scene.add(mesh);
-        let triangle,triangle_mesh = new Ammo.btTriangleMesh();
-        
-        //declare triangles position vectors
-        let vectA = new Ammo.btVector3(0, 0, 0);
-        let vectB = new Ammo.btVector3(0, 0, 0);
-        let vectC = new Ammo.btVector3(0, 0, 0);
 
         //retrieve vertices positions from object
         let verticesPos = mesh.geometry.getAttribute('position').array
@@ -138,30 +131,19 @@ export default class Initializer {
                 z: verticesPos[i + 2]
             });
         }
-
+        let triangle,triangleMesh = new Ammo.btTriangleMesh();
         for (let i = 0; i < triangles.length - 3; i += 3) {
-
-            vectA.setX(triangles[i].x);
-            vectA.setY(triangles[i].y);
-            vectA.setZ(triangles[i].z);
-
-            vectB.setX(triangles[i + 1].x);
-            vectB.setY(triangles[i + 1].y);
-            vectB.setZ(triangles[i + 1].z);
-
-            vectC.setX(triangles[i + 2].x);
-            vectC.setY(triangles[i + 2].y);
-            vectC.setZ(triangles[i + 2].z);
-
-            triangle_mesh.addTriangle(vectA, vectB, vectC, false);
+            triangleMesh.addTriangle(
+                new Ammo.btVector3(triangles[i].x, triangles[i].y, triangles[i].z),
+                new Ammo.btVector3(triangles[i+1].x, triangles[i+1].y, triangles[i+1].z),
+                new Ammo.btVector3(triangles[i+2].x, triangles[i+2].y, triangles[i+2].z),
+                false // last parameter indicates whether to compute bounding box immediately
+            );
         }
-        Ammo.destroy(vectA);
-        Ammo.destroy(vectB);
-        Ammo.destroy(vectC);
         
-        let shape = new Ammo.btConvexTriangleMeshShape(triangle_mesh, true); 
+        let shape = new Ammo.btConvexTriangleMeshShape(triangleMesh, true); 
         if(!isConvex) {
-            shape = new Ammo.btGImpactMeshShape(triangle_mesh, true); 
+            shape = new Ammo.btGImpactMeshShape(triangleMesh); 
         } 
         shape.setMargin(0.2);
         shape.setLocalScaling(new Ammo.btVector3(1,1,1));
