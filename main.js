@@ -1,10 +1,10 @@
-import WebGL from 'https://cdn.jsdelivr.net/npm/three@0.154.0/examples/jsm/capabilities/WebGL.js';
+import WebGL from 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/capabilities/WebGL.js';
 if (!WebGL.isWebGL2Available()) {
     const warning = WebGL.getWebGL2ErrorMessage();
     document.querySelector("body").appendChild(warning);
 }
 
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.154.0/build/three.module.js'
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js'
 
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'
@@ -90,11 +90,10 @@ export default class Initializer {
                 }
             }
         }
-
     }
 
     createBall() {
-        let ballRadius = 1.0;
+        let ballRadius = 0.5;
 
         this.ball = new THREE.Mesh(
             new THREE.SphereGeometry(ballRadius, 14, 10),
@@ -112,7 +111,7 @@ export default class Initializer {
              35,
              pos,
              quat,
-            new Ammo.btVector3(1,0,1));
+            new Ammo.btVector3(0,0,0));
     }
 
     createRigidBody(object, physicsShape, mass, pos, quat, vel, angVel) {
@@ -164,17 +163,11 @@ export default class Initializer {
 
     createInstancedMeshRigidBodies(geometry, material, count, mass, position) {
         const matrix = new THREE.Matrix4();
-        const mesh = new THREE.InstancedMesh(geometry, material, 1);
-
-        for (let i = 0; i < count; i++) {
-            this.getPositionMatrix(matrix);
-            matrix.setPosition(position);
-
-            mesh.setMatrixAt(i, matrix);
-            mesh.castShadow = true;
-        }
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(position.x,position.y,position.z);
         this.scene.add(mesh);
         let triangle,triangle_mesh = new Ammo.btTriangleMesh();
+        
         //declare triangles position vectors
         let vectA = new Ammo.btVector3(0, 0, 0);
         let vectB = new Ammo.btVector3(0, 0, 0);
@@ -205,74 +198,42 @@ export default class Initializer {
             vectC.setY(triangles[i + 2].y);
             vectC.setZ(triangles[i + 2].z);
 
-            triangle_mesh.addTriangle(vectA, vectB, vectC, true);
+            triangle_mesh.addTriangle(vectA, vectB, vectC, false);
         }
         Ammo.destroy(vectA);
         Ammo.destroy(vectB);
         Ammo.destroy(vectC);
-
-        let shape = new Ammo.btConvexTriangleMeshShape(triangle_mesh, true);
-
-        geometry.verticesNeedUpdate = true;
-
-        this.handleInstancedMesh(mesh, shape, mass, position);
+         
+        let shape = new Ammo.btTriangleMeshShape(triangle_mesh, true); 
+        shape.updateBound();
+        shape.setMargin(0.2);
+        shape.setLocalScaling(new Ammo.btVector3(1,1,1));
+        
+        this.addShapeToPhysics(mesh, shape, mass, position);
     }
 
-    getPositionMatrix(matrix) {
-        const position = new THREE.Vector3();
-        const rotation = new THREE.Euler();
-        const quaternion = new THREE.Quaternion();
-        const scale = new THREE.Vector3();
-        position.x = 0;
-        position.y = 0;
-        position.z = 0;
+    addShapeToPhysics(mesh, shape, mass) {
+        const position = mesh.position;
 
-        rotation.x = 0;
-        rotation.y = 0;
-        rotation.z = 0;
+        this.tempTransform = new Ammo.btTransform();
+        this.tempTransform.setIdentity();
+        this.tempTransform.setOrigin(new Ammo.btVector3(position.x, position.y, position.z));
 
-        quaternion.setFromEuler(rotation);
+        const motionState = new Ammo.btDefaultMotionState(this.tempTransform);
 
-        scale.x = scale.y = scale.z = 1;
-
-        matrix.compose(position, quaternion, scale);
-    };
-
-    handleInstancedMesh(mesh, shape, mass, position) {
-        const array = mesh.instanceMatrix.array;
-        const bodies = [];
-
-        for (let i = 0; i < mesh.count; i++) {
-            const index = i * 16;
-
-            const transform = new Ammo.btTransform();
-            transform.setFromOpenGLMatrix(array.slice(index, index + 16));
-
-            const motionState = new Ammo.btDefaultMotionState(transform);
-
-            const localInertia = new Ammo.btVector3(0, 0, 0);
+        const localInertia = new Ammo.btVector3(0, 0, 0);
+        if(mass > 0) {
             shape.calculateLocalInertia(mass, localInertia);
-
-            const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, shape, localInertia);
-            const body = new Ammo.btRigidBody(rbInfo);
-            this.physicsWorld.addRigidBody(body);
-
-            bodies.push(body);
         }
-        this.meshes.push(mesh);
-        this.meshMap.set(mesh, bodies);
 
-        let index = Math.floor(Math.random() * mesh.count);
-        if (mesh.isInstancedMesh) {
-            const bodies = this.meshMap.get(mesh)
-            const body = bodies[index]
+        const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, shape, localInertia);
+        const body = new Ammo.btRigidBody(rbInfo);
 
-            body.setAngularVelocity(new Ammo.btVector3(0, 0, 0))
-            body.setLinearVelocity(new Ammo.btVector3(0, 0, 0))
-            this.tempTransform = new Ammo.btTransform();
-            this.tempTransform.setIdentity();
-            body.setWorldTransform(this.tempTransform)
-        }
+        this.physicsWorld.addRigidBody(body);
+
+        mesh.userData.physicsBody = body;
+
+        this.rigidBodies.push(mesh);
     };
 
     initPhysics() {
@@ -287,8 +248,8 @@ export default class Initializer {
             this.collisionConfiguration);
         this.physicsWorld.setGravity(new Ammo.btVector3(0, - this.gravityConstant, 0));
 
-        this.transformAux1 = new Ammo.btTransform();
-        this.tempBtVec3_1 = new Ammo.btVector3(0, 0, 0);
+        Ammo.btGImpactCollisionAlgorithm.prototype.registerAlgorithm(
+            this.dispatcher);
     }
 
     /**
@@ -345,17 +306,16 @@ export default class Initializer {
         this.physicsWorld.stepSimulation(deltaTime, 10);
         // Update objects
         for ( let i = 0; i < this.rigidBodies.length; i ++ ) {
-
-            const objThree = this.rigidBodies[ i ];
-            const objPhys = objThree.userData.physicsBody;
-            const ms = objPhys.getMotionState();
-            if ( ms ) {
-                let transformAux1 = new Ammo.btTransform();
-                ms.getWorldTransform( transformAux1 );
-                const p = transformAux1.getOrigin();
-                const q = transformAux1.getRotation();
-                objThree.position.set( p.x(), p.y(), p.z() );
-                objThree.quaternion.set( q.x(), q.y(), q.z(), q.w() );
+            const threeMesh = this.rigidBodies[i];
+            const rigitBody = threeMesh.userData.physicsBody;
+            const ms = rigitBody.getMotionState();
+            if (ms) {
+                let tempTransform = new Ammo.btTransform();
+                ms.getWorldTransform( tempTransform );
+                const p = tempTransform.getOrigin();
+                const q = tempTransform.getRotation();
+                threeMesh.position.set( p.x(), p.y(), p.z() );
+                threeMesh.quaternion.set( q.x(), q.y(), q.z(), q.w() );
 
             }
 
