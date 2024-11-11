@@ -24,7 +24,7 @@ export default class Initializer {
     init() {
         this.clock = new THREE.Clock();
         this.controls = null;
-        this.gravityConstant = 9.8;
+        this.gravityConstant = 2*9.8;
         this.margin = 0.05;
         this.rigidBodies = [];
         this.meshes = [];
@@ -74,30 +74,53 @@ export default class Initializer {
 
     waitForTileLoad(gltf, tileNum) {
         let tileMap = [
-            [0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0],
-            [0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0]
+            [0, 0, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 0, 0],
         ];
+
         const geometry = gltf.scene.children[0].geometry;
         const material = gltf.scene.children[0].material;
+        const compoundShape = new Ammo.btCompoundShape();
         for (let i = 0; i < tileMap.length; i++) {
             for (let j = 0; j < tileMap[i].length; j++) {
                 let curTile = tileMap[i][j];
                 if (curTile == tileNum) {
                     const mesh = new THREE.Mesh(geometry, material);
-                    let position = new THREE.Vector3(i * 2, 0, j * 2);
+                    let position = new THREE.Vector3(i * 1.8, 0, j * 1.8);
                     mesh.position.set(position.x,position.y,position.z);
+                    const tileTransform = new Ammo.btTransform();
+                    tileTransform.setIdentity();
+                    tileTransform.setOrigin(new Ammo.btVector3(position.x,position.y,position.z));
                     if(curTile == 1) {
-                        this.createConcaveRigidBodies(mesh, 1, 0);
-
+                        const shape = this.createShapeFromMesh(mesh, false);
+                        compoundShape.addChildShape(tileTransform, shape); 
                     } else {
-                        this.createConcaveRigidBodies(mesh, 1, 0, true);
+                        const shape = this.createShapeFromMesh(mesh, true);
+                        compoundShape.addChildShape(tileTransform, shape);
                     }
                 }
             }
         }
+
+        // Create a rigid body for the compound floor
+        const mass = 0; // Static floor, so mass is zero
+        const floorTransform = new Ammo.btTransform();
+        floorTransform.setIdentity();
+        floorTransform.setOrigin(new Ammo.btVector3(0, 0, 0));
+
+        const motionState = new Ammo.btDefaultMotionState(floorTransform);
+        const localInertia = new Ammo.btVector3(0, 0, 0);
+        const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, compoundShape, localInertia);
+        const floorBody = new Ammo.btRigidBody(rbInfo);
+
+        // Add floor to the physics world
+        this.physicsWorld.addRigidBody(floorBody);
     }
 
     createBall() {
@@ -110,15 +133,15 @@ export default class Initializer {
         this.scene.add(this.ball);
 
         const ballShape = new Ammo.btSphereShape(ballRadius);
-        ballShape.setMargin(0.05);
+        ballShape.setMargin(0.01);
         let pos = new THREE.Vector3(0, 5, 0);
         let quat = new THREE.Vector4(0, 0, 0, 1);
         this.ball.position.set(pos.x,pos.y,pos.z);
         const body = this.addShapeToPhysics(this.ball,ballShape,35);
-        body.setLinearVelocity(new Ammo.btVector3(1,0,1));
+        body.setLinearVelocity(new Ammo.btVector3(4,0,1));
     }
 
-    createConcaveRigidBodies(mesh, count, mass, isConvex) {
+    createShapeFromMesh(mesh, isConvex) {
         this.scene.add(mesh);
 
         //retrieve vertices positions from object
@@ -145,10 +168,9 @@ export default class Initializer {
         if(!isConvex) {
             shape = new Ammo.btGImpactMeshShape(triangleMesh); 
         } 
-        shape.setMargin(0.2);
+        shape.setMargin(0.01);
         shape.setLocalScaling(new Ammo.btVector3(1,1,1));
-        
-        this.addShapeToPhysics(mesh, shape, mass);
+        return shape;
     }
 
     addShapeToPhysics(mesh, shape, mass) {
