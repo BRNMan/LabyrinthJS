@@ -4,10 +4,7 @@ if (!WebGL.isWebGL2Available()) {
     document.querySelector("body").appendChild(warning);
 }
 
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js'
-
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'
+import * as THREE from 'three'
 
 window.addEventListener('load', _ => {
     const initializer = new Initializer();
@@ -35,7 +32,6 @@ export default class Initializer {
         this.animate();
     }
 
-
     initGraphics() {
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color("#bbbbbb");
@@ -50,7 +46,7 @@ export default class Initializer {
             1,
             1000);
         this.camera.position.set(0, 20, 40);
-        this.camera.rotation.set(-Math.PI / 8, 0, 0);
+        this.camera.rotation.set(-Math.PI / 8, 0-.2, 0);
 
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -59,54 +55,51 @@ export default class Initializer {
         document.body.appendChild(this.renderer.domElement);
     }
 
-    createGLTF() {
-        this.loader = new GLTFLoader();
-        this.dracoLoader = new DRACOLoader();
-        this.dracoLoader.setDecoderPath('/static/draco/');
-        this.loader.setDRACOLoader(this.dracoLoader);
-        this.loader.load('./hole_tile.glb', (gltf) => {
-            this.waitForTileLoad(gltf, 1)
-        });
-        this.loader.load('./blank_tile.glb', (gltf) => {
-            this.waitForTileLoad(gltf, 0);
-        });
-    }
-
-    waitForTileLoad(gltf, tileNum) {
+    loadGround() {
         let tileMap = [
-            [0, 0, 0, 0, 0, 0],
+            [1, 0, 0, 0, 0, 0],
             [0, 1, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0],
             [0, 0, 0, 0, 1, 0],
-            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 1],
+            [0, 0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 0, 1],
         ];
 
-        const geometry = gltf.scene.children[0].geometry;
-        const material = gltf.scene.children[0].material;
         const compoundShape = new Ammo.btCompoundShape();
+        const yDim = tileMap.length*2.2;
+        const xDim = tileMap[0].length*2.2;
+        // Rectangle
+        const rect = new THREE.Shape();
+        rect.moveTo(0,0);
+        rect.lineTo(0,yDim);
+        rect.lineTo(xDim,yDim);
+        rect.lineTo(xDim,0);
+        rect.lineTo(0,0);
+        
         for (let i = 0; i < tileMap.length; i++) {
             for (let j = 0; j < tileMap[i].length; j++) {
                 let curTile = tileMap[i][j];
-                if (curTile == tileNum) {
-                    const mesh = new THREE.Mesh(geometry, material);
-                    let position = new THREE.Vector3(i * 1.8, 0, j * 1.8);
-                    mesh.position.set(position.x,position.y,position.z);
-                    const tileTransform = new Ammo.btTransform();
-                    tileTransform.setIdentity();
-                    tileTransform.setOrigin(new Ammo.btVector3(position.x,position.y,position.z));
-                    if(curTile == 1) {
-                        const shape = this.createShapeFromMesh(mesh, false);
-                        compoundShape.addChildShape(tileTransform, shape); 
-                    } else {
-                        const shape = this.createShapeFromMesh(mesh, true);
-                        compoundShape.addChildShape(tileTransform, shape);
-                    }
-                }
+                if(curTile == 1) {
+                    const holePath = new THREE.Path();
+                    holePath.absarc( j*2.2+1.1, i*2.2+1.1,1.0, 0, Math.PI * 2, true );
+                    rect.holes.push( holePath );
+
+                } 
             }
         }
+        const extrudeSettings = {
+            depth: 2,
+            steps: 1,
+            bevelEnabled: false,
+            curveSegments: 8
+          }
+        const geo = new THREE.ExtrudeGeometry(rect, extrudeSettings)
+        geo.rotateX(Math.PI/2);
+        const mat = new THREE.MeshPhongMaterial({ color: 'khaki' })
+        const mesh = new THREE.Mesh(geo, mat)
+        const groundShape = this.createShapeFromMesh(mesh, false);
 
         // Create a rigid body for the compound floor
         const mass = 0; // Static floor, so mass is zero
@@ -116,7 +109,7 @@ export default class Initializer {
 
         const motionState = new Ammo.btDefaultMotionState(floorTransform);
         const localInertia = new Ammo.btVector3(0, 0, 0);
-        const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, compoundShape, localInertia);
+        const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, groundShape, localInertia);
         const floorBody = new Ammo.btRigidBody(rbInfo);
 
         // Add floor to the physics world
@@ -138,7 +131,7 @@ export default class Initializer {
         let quat = new THREE.Vector4(0, 0, 0, 1);
         this.ball.position.set(pos.x,pos.y,pos.z);
         const body = this.addShapeToPhysics(this.ball,ballShape,35);
-        body.setLinearVelocity(new Ammo.btVector3(4,0,1));
+        body.setLinearVelocity(new Ammo.btVector3(4,0,4));
     }
 
     createShapeFromMesh(mesh, isConvex) {
@@ -146,6 +139,7 @@ export default class Initializer {
 
         //retrieve vertices positions from object
         let verticesPos = mesh.geometry.getAttribute('position').array
+        console.log(verticesPos);
         let triangles = []
         for (let i = 0; i < verticesPos.length; i += 3) {
             triangles.push({
@@ -163,14 +157,17 @@ export default class Initializer {
                 false // last parameter indicates whether to compute bounding box immediately
             );
         }
+        console.log(triangles);
         
         let shape = new Ammo.btConvexTriangleMeshShape(triangleMesh, true); 
         if(!isConvex) {
-            shape = new Ammo.btGImpactMeshShape(triangleMesh); 
+            shape = new Ammo.btBvhTriangleMeshShape(triangleMesh); 
         } 
         shape.setMargin(0.01);
         shape.setLocalScaling(new Ammo.btVector3(1,1,1));
+        console.log(shape); 
         return shape;
+        
     }
 
     addShapeToPhysics(mesh, shape, mass) {
@@ -219,7 +216,7 @@ export default class Initializer {
      */
     createWorld() {
         this.createLights();
-        this.createGLTF();
+        this.loadGround();
         //createCube();
         //createGround();
         this.createBall();
