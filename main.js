@@ -45,8 +45,8 @@ export default class Initializer {
             frustumSize / - 2,
             1,
             1000);
-        this.camera.position.set(0, 20, 40);
-        this.camera.rotation.set(-Math.PI / 8, 0 - .2, 0);
+        this.camera.position.set(10, 20, 40);
+        this.camera.lookAt(new THREE.Vector3(10,0,10))
 
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -61,15 +61,14 @@ export default class Initializer {
         // 4 = connect horizontally
         // 5 = connect everywhere
         let wallMap = [
-            [5, 4, 4, 4, 4, 4, 5],
-            [8, 0, 0, 0, 0, 0, 8],
-            [8, 0, 0, 0, 0, 0, 8],
-            [8, 0, 0, 0, 0, 0, 8],
-            [8, 0, 0, 0, 0, 0, 8],
-            [8, 0, 0, 0, 0, 0, 8],
-            [8, 0, 0, 0, 0, 0, 8],
-            [8, 0, 0, 0, 0, 0, 8],
-            [5, 4, 4, 0, 4, 4, 5],
+            [0, 8, 8, 8, 8, 0],
+            [4, 0, 0, 0, 0, 6],
+            [4, 0, 0, 0, 0, 6],
+            [4, 0, 0, 0, 0, 6],
+            [4, 0, 0, 0, 0, 6],
+            [4, 0, 0, 0, 0, 6],
+            [4, 0, 0, 0, 0, 6],
+            [0, 2, 2, 0, 2, 0],
         ];
 
         let tileMap = [
@@ -88,8 +87,8 @@ export default class Initializer {
         const tilePadding = .5;
         const tileSpacing = tileInnerWidth + tilePadding;
         const groundBorderSize = .5;
-        const yGroundSize = tileMap.length * 2.5 + 2 * groundBorderSize;
-        const xGroundSize = tileMap[0].length * 2.5 + 2 * groundBorderSize;
+        const yGroundSize = tileMap.length * tileSpacing; 
+        const xGroundSize = tileMap[0].length * tileSpacing;
         // Rectangle
         const rect = new THREE.Shape();
         rect.moveTo(0, 0);
@@ -123,15 +122,32 @@ export default class Initializer {
                 let curWall = wallMap[i][j];
                 if (curWall != 0) {
                     let x = 1, y = 2, z = 1;
+                    let xOffset=0, zOffset=0;
                     switch (curWall) {
-                        case 5:
-                            x = 1, y = 2, z = 1;
-                            break;
-                        case 4:
-                            x = 3, y = 2, z = .5;
-                            break;
-                        case 8:
+                        // Edges
+                        case 4: // Verical
                             x = .5, y = 2, z = 3;
+                            xOffset = 0;
+                            zOffset = tileSpacing/2;
+                            break;
+                        case 6:
+                            x = .5, y = 2, z = 3;
+                            xOffset = tileSpacing;
+                            zOffset = tileSpacing/2;
+                            break;
+                        case 8: // Horizontal
+                            x = 3, y = 2, z = .5;
+                            xOffset = tileSpacing/2;
+                            zOffset = 0;
+                            break;
+                        case 2:
+                            x = 3, y = 2, z = .5;
+                            xOffset = tileSpacing/2;
+                            zOffset = tileSpacing;
+                            break;
+                        // Corners
+                        case 3:
+
                             break;
                     }
                     const geometry = new THREE.BoxGeometry(x, y, z);
@@ -141,9 +157,9 @@ export default class Initializer {
                     const material = new THREE.MeshPhongMaterial({ color: 0x227777 });
                     const cubeMesh = new THREE.Mesh(geometry, material);
                     cubeMesh.position.set(
-                        j * tileSpacing + groundBorderSize,
+                        j * tileSpacing + xOffset,
                         0,
-                        i * tileSpacing + groundBorderSize);
+                        i * tileSpacing + zOffset);
                     this.scene.add(cubeMesh);
                     this.addShapeToPhysics(cubeMesh, ammoShape, 0);
                 }
@@ -343,9 +359,7 @@ export default class Initializer {
                 const q = tempTransform.getRotation();
                 threeMesh.position.set(p.x(), p.y(), p.z());
                 threeMesh.quaternion.set(q.x(), q.y(), q.z(), q.w());
-
             }
-
         }
     }
 }
