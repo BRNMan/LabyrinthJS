@@ -21,7 +21,7 @@ export default class Initializer {
     init() {
         this.clock = new THREE.Clock();
         this.controls = null;
-        this.gravityConstant = 2*9.8;
+        this.gravityConstant = 3 * 9.8;
         this.margin = 0.05;
         this.rigidBodies = [];
         this.meshes = [];
@@ -46,7 +46,7 @@ export default class Initializer {
             1,
             1000);
         this.camera.position.set(0, 20, 40);
-        this.camera.rotation.set(-Math.PI / 8, 0-.2, 0);
+        this.camera.rotation.set(-Math.PI / 8, 0 - .2, 0);
 
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -56,50 +56,113 @@ export default class Initializer {
     }
 
     loadGround() {
+        // Walls are numpad style
+        // 8 = connect vertically
+        // 4 = connect horizontally
+        // 5 = connect everywhere
+        let wallMap = [
+            [5, 4, 4, 4, 4, 4, 5],
+            [8, 0, 0, 0, 0, 0, 8],
+            [8, 0, 0, 0, 0, 0, 8],
+            [8, 0, 0, 0, 0, 0, 8],
+            [8, 0, 0, 0, 0, 0, 8],
+            [8, 0, 0, 0, 0, 0, 8],
+            [8, 0, 0, 0, 0, 0, 8],
+            [8, 0, 0, 0, 0, 0, 8],
+            [5, 4, 4, 0, 4, 4, 5],
+        ];
+
         let tileMap = [
             [1, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0],
-            [0, 0, 1, 0, 0, 0],
-            [0, 0, 0, 1, 0, 0],
-            [0, 0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 0, 1],
-            [0, 0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 0, 1],
+            [0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 0, 1],
         ];
 
         const compoundShape = new Ammo.btCompoundShape();
-        const yDim = tileMap.length*2.2;
-        const xDim = tileMap[0].length*2.2;
+        const tileInnerWidth = 2.0;
+        const tilePadding = .5;
+        const tileSpacing = tileInnerWidth + tilePadding;
+        const groundBorderSize = .5;
+        const yGroundSize = tileMap.length * 2.5 + 2 * groundBorderSize;
+        const xGroundSize = tileMap[0].length * 2.5 + 2 * groundBorderSize;
         // Rectangle
         const rect = new THREE.Shape();
-        rect.moveTo(0,0);
-        rect.lineTo(0,yDim);
-        rect.lineTo(xDim,yDim);
-        rect.lineTo(xDim,0);
-        rect.lineTo(0,0);
-        
+        rect.moveTo(0, 0);
+        rect.lineTo(0, yGroundSize);
+        rect.lineTo(xGroundSize, yGroundSize);
+        rect.lineTo(xGroundSize, 0);
+        rect.lineTo(0, 0);
+
+        // Make ground/tiles
         for (let i = 0; i < tileMap.length; i++) {
             for (let j = 0; j < tileMap[i].length; j++) {
                 let curTile = tileMap[i][j];
-                if(curTile == 1) {
+                if (curTile == 1) {
                     const holePath = new THREE.Path();
-                    holePath.absarc( j*2.2+1.1, i*2.2+1.1,1.0, 0, Math.PI * 2, true );
-                    rect.holes.push( holePath );
+                    holePath.absarc(j * tileSpacing + tileSpacing / 2,
+                        i * tileSpacing + tileSpacing / 2,
+                        tileInnerWidth / 2.1,
+                        0,
+                        Math.PI * 2,
+                        true);
+                    rect.holes.push(holePath);
 
-                } 
+                }
             }
         }
+
+        const walls = [];
+        // Make walls
+        for (let i = 0; i < wallMap.length; i++) {
+            for (let j = 0; j < wallMap[i].length; j++) {
+                let curWall = wallMap[i][j];
+                if (curWall != 0) {
+                    let x = 1, y = 2, z = 1;
+                    switch (curWall) {
+                        case 5:
+                            x = 1, y = 2, z = 1;
+                            break;
+                        case 4:
+                            x = 3, y = 2, z = .5;
+                            break;
+                        case 8:
+                            x = .5, y = 2, z = 3;
+                            break;
+                    }
+                    const geometry = new THREE.BoxGeometry(x, y, z);
+                    const ammoShape = this.createAmmoShapeFromBox(x, y, z);
+
+                    //geometry
+                    const material = new THREE.MeshPhongMaterial({ color: 0x227777 });
+                    const cubeMesh = new THREE.Mesh(geometry, material);
+                    cubeMesh.position.set(
+                        j * tileSpacing + groundBorderSize,
+                        0,
+                        i * tileSpacing + groundBorderSize);
+                    this.scene.add(cubeMesh);
+                    this.addShapeToPhysics(cubeMesh, ammoShape, 0);
+                }
+            }
+        }
+
+        // Make ground out of tiles and walls.
         const extrudeSettings = {
             depth: 2,
             steps: 1,
             bevelEnabled: false,
             curveSegments: 8
-          }
+        }
         const geo = new THREE.ExtrudeGeometry(rect, extrudeSettings)
-        geo.rotateX(Math.PI/2);
+        geo.rotateX(Math.PI / 2);
         const mat = new THREE.MeshPhongMaterial({ color: 'khaki' })
-        const mesh = new THREE.Mesh(geo, mat)
-        const groundShape = this.createShapeFromMesh(mesh, false);
+        const mesh = new THREE.Mesh(geo, mat);
+        this.scene.add(mesh);
+        const groundShape = this.createAmmoShapeFromMesh(mesh, false);
 
         // Create a rigid body for the compound floor
         const mass = 0; // Static floor, so mass is zero
@@ -125,21 +188,29 @@ export default class Initializer {
         );
         this.scene.add(this.ball);
 
-        const ballShape = new Ammo.btSphereShape(ballRadius);
-        ballShape.setMargin(0.01);
+        const ballShape = this.createAmmoShapeFromSphere(ballRadius);
         let pos = new THREE.Vector3(0, 5, 0);
         let quat = new THREE.Vector4(0, 0, 0, 1);
-        this.ball.position.set(pos.x,pos.y,pos.z);
-        const body = this.addShapeToPhysics(this.ball,ballShape,35);
-        body.setLinearVelocity(new Ammo.btVector3(4,0,4));
+        this.ball.position.set(pos.x, pos.y, pos.z);
+        const body = this.addShapeToPhysics(this.ball, ballShape, 35);
+        body.setLinearVelocity(new Ammo.btVector3(4, 0, 20));
     }
 
-    createShapeFromMesh(mesh, isConvex) {
-        this.scene.add(mesh);
+    createAmmoShapeFromSphere(radius) {
+        const ballShape = new Ammo.btSphereShape(radius);
+        ballShape.setMargin(0.01);
+        return ballShape;
+    }
 
+    createAmmoShapeFromBox(x, y, z) {
+        const boxShape = new Ammo.btBoxShape(new Ammo.btVector3(x,y,z));
+        boxShape.setMargin(0.01);
+        return boxShape;
+    }
+
+    createAmmoShapeFromMesh(mesh, isConvex) {
         //retrieve vertices positions from object
         let verticesPos = mesh.geometry.getAttribute('position').array
-        console.log(verticesPos);
         let triangles = []
         for (let i = 0; i < verticesPos.length; i += 3) {
             triangles.push({
@@ -148,26 +219,24 @@ export default class Initializer {
                 z: verticesPos[i + 2]
             });
         }
-        let triangle,triangleMesh = new Ammo.btTriangleMesh();
+        let triangle, triangleMesh = new Ammo.btTriangleMesh();
         for (let i = 0; i < triangles.length - 3; i += 3) {
             triangleMesh.addTriangle(
                 new Ammo.btVector3(triangles[i].x, triangles[i].y, triangles[i].z),
-                new Ammo.btVector3(triangles[i+1].x, triangles[i+1].y, triangles[i+1].z),
-                new Ammo.btVector3(triangles[i+2].x, triangles[i+2].y, triangles[i+2].z),
+                new Ammo.btVector3(triangles[i + 1].x, triangles[i + 1].y, triangles[i + 1].z),
+                new Ammo.btVector3(triangles[i + 2].x, triangles[i + 2].y, triangles[i + 2].z),
                 false // last parameter indicates whether to compute bounding box immediately
             );
         }
-        console.log(triangles);
-        
-        let shape = new Ammo.btConvexTriangleMeshShape(triangleMesh, true); 
-        if(!isConvex) {
-            shape = new Ammo.btBvhTriangleMeshShape(triangleMesh); 
-        } 
+
+        let shape = new Ammo.btConvexTriangleMeshShape(triangleMesh, true);
+        if (!isConvex) {
+            shape = new Ammo.btBvhTriangleMeshShape(triangleMesh);
+        }
         shape.setMargin(0.01);
-        shape.setLocalScaling(new Ammo.btVector3(1,1,1));
-        console.log(shape); 
+        shape.setLocalScaling(new Ammo.btVector3(1, 1, 1));
         return shape;
-        
+
     }
 
     addShapeToPhysics(mesh, shape, mass) {
@@ -180,7 +249,7 @@ export default class Initializer {
         const motionState = new Ammo.btDefaultMotionState(this.tempTransform);
 
         const localInertia = new Ammo.btVector3(0, 0, 0);
-        if(mass > 0) {
+        if (mass > 0) {
             shape.calculateLocalInertia(mass, localInertia);
         }
 
@@ -190,8 +259,8 @@ export default class Initializer {
         this.physicsWorld.addRigidBody(body);
 
         mesh.userData.physicsBody = body;
-
         this.rigidBodies.push(mesh);
+
         return body;
     };
 
@@ -254,7 +323,6 @@ export default class Initializer {
     render() {
         const deltaTime = this.clock.getDelta();
         this.updatePhysics(deltaTime);
-        //updateCube(deltaTime);
         //updateBall();
         //updateGround(deltaTime);
         this.renderer.render(this.scene, this.camera);
@@ -264,17 +332,17 @@ export default class Initializer {
         // Step world
         this.physicsWorld.stepSimulation(deltaTime, 10);
         // Update objects
-        for ( let i = 0; i < this.rigidBodies.length; i ++ ) {
+        for (let i = 0; i < this.rigidBodies.length; i++) {
             const threeMesh = this.rigidBodies[i];
-            const rigitBody = threeMesh.userData.physicsBody;
-            const ms = rigitBody.getMotionState();
+            const rigidBody = threeMesh.userData.physicsBody;
+            const ms = rigidBody.getMotionState();
             if (ms) {
                 let tempTransform = new Ammo.btTransform();
-                ms.getWorldTransform( tempTransform );
+                ms.getWorldTransform(tempTransform);
                 const p = tempTransform.getOrigin();
                 const q = tempTransform.getRotation();
-                threeMesh.position.set( p.x(), p.y(), p.z() );
-                threeMesh.quaternion.set( q.x(), q.y(), q.z(), q.w() );
+                threeMesh.position.set(p.x(), p.y(), p.z());
+                threeMesh.quaternion.set(q.x(), q.y(), q.z(), q.w());
 
             }
 
