@@ -21,7 +21,7 @@ export default class Initializer {
     init() {
         this.clock = new THREE.Clock();
         this.controls = null;
-        this.gravityConstant = 8 * 9.8;
+        this.gravityConstant = 20 * 9.8;
         this.margin = 0.05;
         this.threePhysicsMeshes = [];
         this.meshes = [];
@@ -50,10 +50,17 @@ export default class Initializer {
 
     initGraphics() {
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color("#bbbbbb");
+        const texture = new THREE.TextureLoader().load( "wallcat.jpg" );
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set( 1, 1 );
+        this.scene.background = texture;
 
         const frustumSize = 40;
         const aspect = window.innerWidth / window.innerHeight;
+        /**this.camera = new THREE.PerspectiveCamera(
+
+        );**/
         this.camera = new THREE.OrthographicCamera(
             frustumSize * aspect / - 2,
             frustumSize * aspect / 2,
@@ -61,8 +68,8 @@ export default class Initializer {
             frustumSize / - 2,
             1,
             1000);
-        this.camera.position.set(10, 20, 40);
-        this.camera.lookAt(new THREE.Vector3(10,0,10))
+        this.camera.position.set(0, 20, 40);
+        this.camera.lookAt(new THREE.Vector3(0,0,0))
 
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -72,6 +79,9 @@ export default class Initializer {
     }
 
     loadMap() {
+        this.globalXOffset = -10;
+        this.globalZOffset = -10;
+
         // Walls are numpad style
         // 8 = connect vertically
         // 4 = connect horizontally
@@ -168,6 +178,7 @@ export default class Initializer {
             curveSegments: 8
         }
         const geo = new THREE.ExtrudeGeometry(rect, extrudeSettings)
+        geo.translate(this.globalXOffset,this.globalZOffset,0);
         geo.rotateX(Math.PI / 2);
         const mat = new THREE.MeshPhongMaterial({ color: 'khaki' })
         const mesh = new THREE.Mesh(geo, mat);
@@ -195,6 +206,7 @@ export default class Initializer {
 
         // Add floor to the physics world
         this.groundGroup.add(mesh);
+        this.groundGroup.position.set(0,0,0)
         this.scene.add(this.groundGroup)
         this.namedMeshMap.set("ground", this.groundGroup);
         this.groundGroup.userData.physicsBody = floorBody;
@@ -222,9 +234,9 @@ export default class Initializer {
         const material = new THREE.MeshPhongMaterial({ color: 0x227777 });
         const cubeMesh = new THREE.Mesh(geometry, material);
         cubeMesh.position.set(
-            j * tileSpacing + xOffset,
+            j * tileSpacing + xOffset + this.globalXOffset,
             0,
-            i * tileSpacing + zOffset);
+            i * tileSpacing + zOffset + this.globalZOffset);
         this.groundGroup.add(cubeMesh);
         if(!!compoundShape) {
             const tileTransform = new Ammo.btTransform();
@@ -256,7 +268,7 @@ export default class Initializer {
         let quat = new THREE.Vector4(0, 0, 0, 1);
         this.ball.position.set(pos.x, pos.y, pos.z);
         const body = this.addShapeToPhysics(this.ball, ballShape, 35);
-        body.setLinearVelocity(new Ammo.btVector3(4, 0, 20));
+        body.setLinearVelocity(new Ammo.btVector3(0, 0, 20));
     }
 
     createAmmoShapeFromSphere(radius) {
@@ -266,7 +278,7 @@ export default class Initializer {
     }
 
     createAmmoShapeFromBox(x, y, z) {
-        const boxShape = new Ammo.btBoxShape(new Ammo.btVector3(x,y,z));
+        const boxShape = new Ammo.btBoxShape(new Ammo.btVector3(x/2,y/2,z/2));
         boxShape.setMargin(0.01);
         return boxShape;
     }
@@ -401,25 +413,27 @@ export default class Initializer {
     updateGround(deltaTime) {
         let groundMesh = this.namedMeshMap.get("ground");
 
-        let curXRotation = groundMesh.rotation.x;
-        let curZRotation = groundMesh.rotation.z;
-        if(this.isKeyDown("w")) { 
-            curXRotation += 1*deltaTime;
-        } else if(this.isKeyDown("s")) {
-            curXRotation -= 1*deltaTime;       
+        let curXRotation = 0;
+        let curZRotation = 0;
+        if(this.isKeyDown("w") || this.isKeyDown("ArrowUp")) { 
+            curXRotation = -1*deltaTime;
+        } else if(this.isKeyDown("s") || this.isKeyDown("ArrowDown")) {
+            curXRotation = 1*deltaTime;       
         }
-        if(this.isKeyDown("a")) { 
-            curZRotation += 1*deltaTime;
-        } else if(this.isKeyDown("d")) {
-            curZRotation -= 1*deltaTime;       
+        if(this.isKeyDown("a") || this.isKeyDown("ArrowLeft")) { 
+            curZRotation = 1*deltaTime;
+        } else if(this.isKeyDown("d") || this.isKeyDown("ArrowRight")) {
+            curZRotation = -1*deltaTime;       
         }
 
 
         let tmpPos = new THREE.Vector3(), tmpQuat = new THREE.Quaternion();
         let ammoTmpPos = new Ammo.btVector3(), ammoTmpQuat = new Ammo.btQuaternion();
       
-        groundMesh.setRotationFromEuler(new THREE.Euler( curXRotation, 0, curZRotation, 'XYZ' ))
-    
+        let axis = new THREE.Vector3(curXRotation,0,curZRotation).normalize();
+        let point = new THREE.Vector3(10,0,10);
+        groundMesh.rotateOnAxis(axis,deltaTime*Math.PI/10);
+
         groundMesh.getWorldPosition(tmpPos);
         groundMesh.getWorldQuaternion(tmpQuat);
     
