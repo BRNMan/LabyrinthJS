@@ -68,7 +68,7 @@ export default class Initializer {
             frustumSize / - 2,
             1,
             1000);
-        this.camera.position.set(0, 20, 40);
+        this.camera.position.set(0, 40, 40);
         this.camera.lookAt(new THREE.Vector3(0,0,0))
 
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
