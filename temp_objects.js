@@ -110,16 +110,9 @@ function updateBall() {
 }
 
 function updateGround(deltaTime) {
-    // This should function as a spring roughly, where the player can move it
-    // and it will bounce back slightly, but can't move it past the yield point.
     let pBody = ground.userData.physicsBody;
     const yieldPoint = Math.PI/4;
     let xRot = ground.rotation.x, yRot = ground.rotation.y, zRot = ground.rotation.z;
-    if(zRot > yieldPoint) {} 
-        //pBody.
-    // } else if (zrot < -yieldPoint) {
-
-    // }
     document.querySelector("#stats").textContent = ground.rotation.z;
 }
 
